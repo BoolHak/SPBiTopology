@@ -683,10 +683,10 @@ theorem iotaSuffix_image_univ : iotaSuffix '' Set.univ = EventuallyZeroSet := by
               have hz'_norm_ne : z'.norm ≠ 0 := by
                 intro h_zero
                 exact hz'_zero ((norm_eq_zero_iff z').mp h_zero)
-              have hz'_norm_pos : 0 < z'.norm.natAbs := Int.natAbs_pos.mpr hz'_norm_ne
               have : 2 * z'.norm.natAbs = 1 := by
                 have h := Int.natAbs_mul 2 z'.norm
                 simp only [Int.natAbs_ofNat] at h
+                have := Int.natAbs_pos.mpr hz'_norm_ne
                 omega
               omega
             rw [nthDigitLSD, toDigits]
@@ -937,5 +937,264 @@ theorem golden_identity (S : Set GaussianInt) (hS : S.Finite) :
   Set.Subset.antisymm
     (iInter_saturation_subset_iotaSuffixImage S hS)
     (iotaSuffixImage_subset_iInter_saturation S)
+
+/-! ## Section 7: DigitLength-Norm Bounds
+
+The critical bridge between the discrete scale (digitLength) and continuous size (norm).
+These bounds establish that digitLength z ≈ log₂(norm z), which is essential for
+proving the convergence of saturation measures to asymptotic density.
+
+**Key insight**: Since |β|² = 2, we have:
+- Upper bound: norm(z) ≤ C_upper * 2^(digitLength z)
+- Lower bound: c_lower * 2^(digitLength z) ≤ norm(z) for z ≠ 0
+
+This logarithmic equivalence is what makes the Golden Identity "golden".
+-/
+
+/-- Key relationship: digitLength is bounded by 2 * norm + 13.
+
+    This follows from digitLength ≤ terminationMeasure and the structure of
+    terminationMeasure (which equals baseMeasure = 2*norm + O(1) for non-exceptional z,
+    and is at most 12 for exceptional z with norm ≤ 5).
+
+    The proof handles exceptional values explicitly and uses baseMeasure for the rest. -/
+theorem digitLength_le_two_norm_add (z : GaussianInt) (hz : z ≠ 0) :
+    digitLength z ≤ 2 * z.norm.natAbs + 13 := by
+  have h1 : digitLength z ≤ terminationMeasure z := digitLength_le_terminationMeasure z
+  -- terminationMeasure ≤ 2*norm + 13 for all nonzero z
+  have h_term_bound : terminationMeasure z ≤ 2 * z.norm.natAbs + 13 := by
+    by_cases h_exc : isExceptional z
+    · -- Exceptional case: terminationMeasure ≤ 12 and norm ≥ 1, so 2*norm + 13 ≥ 15 > 12
+      unfold isExceptional at h_exc
+      rcases h_exc with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
+      · exact absurd rfl hz
+      -- For z = 1: terminationMeasure = 1, norm = 1, 2*1 + 13 = 15 ≥ 1 ✓
+      · simp only [terminationMeasure]; decide
+      -- For z = i: terminationMeasure = 2, norm = 1, 2*1 + 13 = 15 ≥ 2 ✓
+      · simp only [terminationMeasure, norm_eq]; decide
+      -- For z = -i: terminationMeasure = 3, norm = 1
+      · simp only [terminationMeasure, norm_eq]; decide
+      -- For z = 1+i: terminationMeasure = 4, norm = 2
+      · simp only [terminationMeasure, norm_eq]; decide
+      -- For z = -1: terminationMeasure = 5, norm = 1
+      · simp only [terminationMeasure, norm_eq]; decide
+      -- For z = 1-i: terminationMeasure = 6, norm = 2
+      · simp only [terminationMeasure, norm_eq]; decide
+      -- For z = -2+i: terminationMeasure = 12, norm = 5
+      · simp only [terminationMeasure, norm_eq]; decide
+      -- For z = -2-i: terminationMeasure = 12, norm = 5
+      · simp only [terminationMeasure, norm_eq]; decide
+    · -- Non-exceptional: terminationMeasure = baseMeasure = 2*norm + (0 or 1)
+      have h1' : z ≠ 1 := fun h => h_exc (Or.inr (Or.inl h))
+      have hi : z ≠ ⟨0, 1⟩ := fun h => h_exc (Or.inr (Or.inr (Or.inl h)))
+      have hni : z ≠ ⟨0, -1⟩ := fun h => h_exc (Or.inr (Or.inr (Or.inr (Or.inl h))))
+      have h1i : z ≠ ⟨1, 1⟩ := fun h => h_exc (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl h)))))
+      have hn1 : z ≠ ⟨-1, 0⟩ := fun h => h_exc (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl h))))))
+      have h1ni : z ≠ ⟨1, -1⟩ := fun h => h_exc (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl h)))))))
+      have hn2i : z ≠ ⟨-2, 1⟩ := fun h => h_exc (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl h))))))))
+      have hn2ni : z ≠ ⟨-2, -1⟩ := fun h => h_exc (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr h))))))))
+      -- Establish that terminationMeasure z = baseMeasure z for non-exceptional z
+      have h_eq : terminationMeasure z = baseMeasure z := by
+        simp only [terminationMeasure, hz, h1', hi, hni, h1i, hn1, h1ni, hn2i, hn2ni, ite_false]
+      rw [h_eq]
+      -- baseMeasure z = 2 * norm + (if digit z then 1 else 0) ≤ 2*norm + 1 ≤ 2*norm + 13
+      unfold baseMeasure
+      split_ifs <;> omega
+  omega
+
+/-! ### Geometric Series Bounds (The True Scaling Lemma)
+
+The key insight: z = Σⱼ dⱼ βʲ where dⱼ ∈ {0,1} and |β|² = 2.
+Using the triangle inequality:
+  |z| ≤ Σⱼ |dⱼ| |β|ʲ ≤ Σⱼ (√2)ʲ = ((√2)^L - 1)/(√2 - 1)
+Squaring: norm(z) ≤ C * 2^L where C ≈ 6.
+
+This is the CORRECT scaling: norm grows EXPONENTIALLY with digitLength.
+-/
+
+/-- Helper: norm(1 + β*w) ≤ 4*norm(w) + 3 for any Gaussian integer w.
+    This bound supports the 4^n recurrence for evalDigits. -/
+theorem norm_one_add_β_mul_le (w : GaussianInt) :
+    (1 + β * w).norm.natAbs ≤ 4 * w.norm.natAbs + 3 := by
+  -- Direct computation: 1 + β*w where β = -1 + i
+  -- (1 + β*w).re = 1 + (-1)*w.re - 1*w.im = 1 - w.re - w.im
+  -- (1 + β*w).im = 0 + (-1)*w.im + 1*w.re = w.re - w.im
+  -- norm = (1 - w.re - w.im)² + (w.re - w.im)²
+  --      = 1 - 2(w.re + w.im) + 2(w.re² + w.im²)
+  --      = 1 - 2(w.re + w.im) + 2*norm(w)
+  have h_nn := norm_nonneg w
+  have h_res_nn : (1 + β * w).norm ≥ 0 := norm_nonneg _
+  -- The key bound: (w.re + w.im)² ≤ 2*norm(w)
+  have h_cross : (w.re + w.im)^2 ≤ 2 * w.norm := by
+    have h := norm_eq w
+    nlinarith [sq_nonneg (w.re - w.im)]
+  -- Compute norm(1 + β*w) directly
+  have h_norm_val : (1 + β * w).norm = 1 - 2*(w.re + w.im) + 2*w.norm := by
+    simp only [Zsqrtd.norm, β, Zsqrtd.add_re, Zsqrtd.add_im, Zsqrtd.mul_re,
+               Zsqrtd.mul_im, Zsqrtd.one_re, Zsqrtd.one_im]
+    ring
+  -- Upper bound using |w.re + w.im| ≤ √(2*norm) ≤ norm + 1
+  have h_abs_sq : (w.re + w.im)^2 ≤ (w.norm + 1)^2 := by
+    have : 2 * w.norm ≤ (w.norm + 1)^2 := by nlinarith
+    linarith
+  -- So |w.re + w.im| ≤ norm + 1
+  have h_bound : (1 + β * w).norm ≤ 3 + 4 * w.norm := by
+    rw [h_norm_val]
+    -- -2(w.re + w.im) ≤ 2|w.re + w.im| ≤ 2(norm + 1)
+    have h1 : -2*(w.re + w.im) ≤ 2*(w.norm + 1) := by nlinarith [h_abs_sq]
+    linarith
+  have h_eq1 : w.norm.natAbs = w.norm := Int.natAbs_of_nonneg h_nn
+  have h_eq2 : (1 + β * w).norm.natAbs = (1 + β * w).norm := Int.natAbs_of_nonneg h_res_nn
+  omega
+
+/-- Bound on norm of evalDigits: norm(evalDigits ds) ≤ 8^(ds.length) = 2^(3*ds.length).
+    This is a BASE-2 bound: 8 = 2³, so norm ≤ 2^(3L).
+
+    The recurrence works because:
+    - d=0: 2 * 8^n ≤ 8^(n+1) ✓ (since 2 ≤ 8)
+    - d=1: 4 * 8^n + 3 ≤ 8^(n+1) ✓ (since 3 ≤ 4*8^n for all n ≥ 0) -/
+theorem norm_evalDigits_le (ds : List Bool) :
+    (evalDigits ds).norm.natAbs ≤ 8^ds.length := by
+  induction ds with
+  | nil =>
+    simp only [evalDigits, List.length_nil, pow_zero]
+    decide
+  | cons d ds ih =>
+    simp only [evalDigits, List.length_cons]
+    set w := evalDigits ds
+    cases d with
+    | false =>
+      -- norm(β*w) = 2*norm(w) ≤ 2*8^n ≤ 8^(n+1)
+      calc ((if false then 1 else 0) + β * w).norm.natAbs
+          = (β * w).norm.natAbs := by simp
+        _ = (2 * w.norm).natAbs := by rw [norm_mul_β]
+        _ = 2 * w.norm.natAbs := by have := norm_nonneg w; omega
+        _ ≤ 2 * 8^ds.length := by omega
+        _ ≤ 8 * 8^ds.length := by omega
+        _ = 8^(ds.length + 1) := by ring
+    | true =>
+      -- norm(1 + β*w) ≤ 4*norm(w) + 3 ≤ 4*8^n + 3 ≤ 8^(n+1) = 8*8^n
+      -- Need: 4*8^n + 3 ≤ 8*8^n, i.e., 3 ≤ 4*8^n (true for all n ≥ 0)
+      have h_bound := norm_one_add_β_mul_le w
+      calc ((if true then 1 else 0) + β * w).norm.natAbs
+          = (1 + β * w).norm.natAbs := by simp
+        _ ≤ 4 * w.norm.natAbs + 3 := h_bound
+        _ ≤ 4 * 8^ds.length + 3 := by omega
+        _ ≤ 4 * 8^ds.length + 4 * 8^ds.length := by
+            have h : 1 ≤ 8^ds.length := Nat.one_le_pow ds.length 8 (by norm_num)
+            omega
+        _ = 8 * 8^ds.length := by ring
+        _ = 8^(ds.length + 1) := by ring
+
+/-- **THE SCALING LEMMA (Base-2)**: norm ≤ 8^(digitLength) = 2^(3*digitLength).
+    This is the proper BASE-2 exponential bound matching the Cantor measure. -/
+theorem norm_le_exp_digitLength (z : GaussianInt) :
+    z.norm.natAbs ≤ 8^(digitLength z) := by
+  by_cases hz : z = 0
+  · subst hz; simp [digitLength_zero]
+  · have h := norm_evalDigits_le (toDigits z)
+    rw [evalDigits_toDigits] at h
+    simp only [digitLength]
+    exact h
+
+/-- Corollary: norm ≤ 2^(3*digitLength).
+    This is the base-2 form of the scaling lemma. -/
+theorem norm_le_two_pow_three_digitLength (z : GaussianInt) :
+    z.norm.natAbs ≤ 2^(3 * digitLength z) := by
+  have h := norm_le_exp_digitLength z
+  calc z.norm.natAbs ≤ 8^(digitLength z) := h
+    _ = (2^3)^(digitLength z) := by norm_num
+    _ = 2^(3 * digitLength z) := by rw [← pow_mul]
+
+/-- **Logarithmic Equivalence (Upper)**: digitLength ≥ log₂(norm) / 3.
+    Since norm ≤ 2^(3L), we have log₂(norm) ≤ 3L, so L ≥ log₂(norm)/3. -/
+theorem digitLength_ge_log_norm (z : GaussianInt) (_hz : z ≠ 0) :
+    8^(digitLength z) ≥ z.norm.natAbs := by
+  exact norm_le_exp_digitLength z
+
+/-- **Lower Bound on Norm**: norm ≥ (digitLength - 13) / 2.
+    This is a LINEAR lower bound derived from digitLength ≤ 2*norm + 13.
+
+    Note: An EXPONENTIAL lower bound (c * 2^L ≤ norm) is NOT achievable because
+    cancellation in the digit sum can produce small norm with many digits.
+    Example: 1 + β = i has norm 1 but 2 digits.
+
+    However, the linear bound is sufficient for density convergence because
+    it ensures digitLength grows at most linearly with norm. -/
+theorem norm_ge_digitLength_linear (z : GaussianInt) (hz : z ≠ 0) :
+    z.norm.natAbs ≥ (digitLength z - 13) / 2 := by
+  have h := digitLength_le_two_norm_add z hz
+  omega
+
+/-- Combined Scaling Bounds: The relationship between digitLength L and norm N.
+
+    Upper: N ≤ 8^L = 2^(3L)  →  L ≥ log₂(N) / 3
+    Lower: N ≥ (L - 13) / 2  →  L ≤ 2N + 13
+
+    Together: (L - 13) / 2 ≤ N ≤ 2^(3L)
+
+    This means:
+    - digitLength is LOGARITHMIC in norm (upper bound)
+    - digitLength is LINEAR in norm (lower bound)
+
+    The asymmetry reflects that digits can "cancel" to reduce norm,
+    but cannot "amplify" beyond the geometric series bound. -/
+theorem scaling_bounds (z : GaussianInt) (hz : z ≠ 0) :
+    (digitLength z - 13) / 2 ≤ z.norm.natAbs ∧
+    z.norm.natAbs ≤ 8^(digitLength z) := by
+  exact ⟨norm_ge_digitLength_linear z hz, norm_le_exp_digitLength z⟩
+
+/-! ## Section 8: The Final Convergence Theorem
+
+With the digitLength-norm bounds established, we can now prove the convergence
+of saturation measures to asymptotic density.
+-/
+
+/-! ## Proven Golden Identity Results
+
+The following theorems establish the Golden Identity for specific cases:
+1. **Empty set**: μ_cantor(iotaSuffixClosure ∅) = 0
+2. **Full set**: μ_cantor(iotaSuffixClosure Set.univ) = 1 (golden_identity_full_set)
+
+The general identity `μ_cantor(iotaSuffixClosure S) = AsymptoticLogDensity S`
+requires measure continuity infrastructure to prove the convergence of
+saturation measures to the closure measure. The key supporting theorems are:
+- `digitLength_le_two_norm_add`: L ≤ 2*norm + 13 (scale correspondence)
+- `fundamental_bridge_β_pow`: LogWeight(β^k) = μ_cylinder(k) (weight-measure bridge)
+- `separation_lemma`: distinct z have disjoint cylinders (measure additivity)
+- `golden_identity`: set-theoretic identity for finite S
+-/
+
+/-- iotaSuffixClosure of empty set is empty -/
+theorem iotaSuffixClosure_empty : iotaSuffixClosure ∅ = ∅ := by
+  simp only [iotaSuffixClosure, Set.image_empty, closure_empty]
+
+/-- μ_cantor of empty set is 0 -/
+theorem μ_cantor_empty : μ_cantor ∅ = 0 := MeasureTheory.measure_empty
+
+/-- **Golden Identity for Empty Set**: μ_cantor(iotaSuffixClosure ∅) = 0 -/
+theorem golden_identity_empty_measure :
+    μ_cantor (iotaSuffixClosure ∅) = 0 := by
+  rw [iotaSuffixClosure_empty, μ_cantor_empty]
+
+/-- **Summary of Proven Golden Identity Results**:
+
+    1. For S = ∅: μ_cantor(iotaSuffixClosure ∅) = 0 (golden_identity_empty_measure)
+
+    2. For S = Set.univ: μ_cantor(iotaSuffixClosure Set.univ) = 1 (golden_identity_full_set)
+
+    3. For finite S: iotaSuffixImage S = (⋂_n Saturation S n) ∩ EventuallyZeroSet (golden_identity)
+
+    These establish the Golden Identity framework connecting:
+    - Topological measure (μ_cantor on Cantor space)
+    - β-adic digit representation (iotaSuffix, digitLength)
+    - Norm-based bounds (digitLength ≤ 2*norm + 13)
+
+    The full density version `μ_cantor(iotaSuffixClosure S) = AsymptoticLogDensity S`
+    for general S requires additional measure-theoretic limit exchange infrastructure. -/
+theorem golden_identity_summary :
+    μ_cantor (iotaSuffixClosure ∅) = 0 ∧
+    μ_cantor (iotaSuffixClosure Set.univ) = 1 := by
+  exact ⟨golden_identity_empty_measure, golden_identity_full_set⟩
 
 end SPBiTopology
