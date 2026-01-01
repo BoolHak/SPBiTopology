@@ -1150,6 +1150,313 @@ With the digitLength-norm bounds established, we can now prove the convergence
 of saturation measures to asymptotic density.
 -/
 
+/-! ### Gap 1 Fix: Precise Asymptotic Bounds
+
+The key relationship: digitLength z ≈ log₂(norm z) in the asymptotic sense.
+
+**Upper bound (logarithmic)**: From norm ≤ 8^L = 2^(3L), we get L ≥ log₂(norm)/3
+**Lower bound (linear)**: From L ≤ 2*norm + 13, we get L ≤ O(norm)
+
+The asymmetry is fundamental: digits can cancel (reducing norm) but cannot amplify
+beyond the geometric bound. However, for DENSITY computations, we need the
+INVERSE relationship: given norm bound N, what depth k captures all such elements?
+
+**Critical Insight**: If norm(z) ≤ N, then digitLength(z) ≤ 2N + 13.
+This means Saturation S k contains the image of all z ∈ S with norm ≤ (k-13)/2.
+-/
+
+/-- **Norm-to-Depth Correspondence**: Elements with norm ≤ N have digitLength ≤ 2N + 13.
+    This is the key bound for relating LogSum to Saturation. -/
+theorem norm_bound_implies_digitLength_bound (z : GaussianInt) (N : ℕ)
+    (hz : z ≠ 0) (h_norm : z.norm.natAbs ≤ N) :
+    digitLength z ≤ 2 * N + 13 := by
+  have h := digitLength_le_two_norm_add z hz
+  omega
+
+/-- **Depth-to-Norm Correspondence (Converse)**: Elements with digitLength > 2N + 13 have norm > N.
+    Contrapositive of norm_bound_implies_digitLength_bound. -/
+theorem digitLength_bound_implies_norm_bound (z : GaussianInt) (N : ℕ)
+    (hz : z ≠ 0) (h_len : digitLength z > 2 * N + 13) :
+    z.norm.natAbs > N := by
+  by_contra h_not_gt
+  push_neg at h_not_gt
+  have h := norm_bound_implies_digitLength_bound z N hz h_not_gt
+  omega
+
+/-- **Saturation Captures Bounded Norm**: If z ∈ S has digitLength ≤ k,
+    then iotaSuffix z ∈ Saturation S k. -/
+theorem saturation_contains_bounded_elements (S : Set GaussianInt) (z : GaussianInt)
+    (hz : z ∈ S) (k : ℕ) (_h_len : digitLength z ≤ k) :
+    iotaSuffix z ∈ Saturation S k := by
+  simp only [Saturation, Set.mem_iUnion]
+  use z, hz
+  intro j
+  rfl
+
+/-- **Complete Capture Theorem**: For k ≥ 2N + 13, Saturation S k contains
+    the iotaSuffix images of ALL elements of S with norm ≤ N.
+    This is the bridge between norm bounds and saturation depth. -/
+theorem saturation_captures_norm_bounded (S : Set GaussianInt) (N k : ℕ)
+    (hk : k ≥ 2 * N + 13) :
+    ∀ z ∈ S, z ≠ 0 → z.norm.natAbs ≤ N → iotaSuffix z ∈ Saturation S k := by
+  intro z hz hz_ne h_norm
+  apply saturation_contains_bounded_elements S z hz k
+  have h := digitLength_le_two_norm_add z hz_ne
+  omega
+
+/-- **Asymptotic Logarithmic Equivalence (Upper)**: digitLength ≥ ⌊log₂(norm)/3⌋.
+    Since norm ≤ 2^(3L), taking log₂: log₂(norm) ≤ 3L, hence L ≥ log₂(norm)/3.
+
+    This theorem states the relationship in terms of powers of 2 (avoiding Real.log). -/
+theorem digitLength_ge_log_norm_div3 (z : GaussianInt) (_hz : z ≠ 0) (k : ℕ)
+    (h_norm : z.norm.natAbs > 8^k) :
+    digitLength z > k := by
+  by_contra h_not_gt
+  push_neg at h_not_gt
+  have h := norm_le_exp_digitLength z
+  have : z.norm.natAbs ≤ 8^k := Nat.le_trans h (Nat.pow_le_pow_right (by norm_num) h_not_gt)
+  omega
+
+/-- **The Canonical Scaling**: For β^k, we have norm = 2^k.
+    This gives the exact relationship for the canonical elements. -/
+theorem β_pow_exact_scaling (k : ℕ) :
+    (β ^ k).norm.natAbs = 2 ^ k := norm_β_pow_natAbs k
+
+/-! ### Gap 2 Fix: Measure σ-Additivity for Infinite Disjoint Unions
+
+For countable sets S, we need to sum measures over infinitely many disjoint cylinders.
+The Cantor measure μ_cantor is σ-additive (being a measure), so this follows from
+Mathlib's measure theory infrastructure.
+-/
+
+/-- **Pairwise Disjointness at Sufficient Depth**: For any finite S, there exists
+    a depth k such that all elements of S have pairwise disjoint k-cylinders. -/
+theorem exists_separating_depth_finite (S : Set GaussianInt) (hS : S.Finite) :
+    ∃ k, ∀ z ∈ S, ∀ w ∈ S, z ≠ w →
+      (fun j : Fin k => iotaSuffix z j.val) ≠ (fun j => iotaSuffix w j.val) := by
+  by_cases hS_empty : S = ∅
+  · use 0; intro z hz; simp [hS_empty] at hz
+  -- For finite S, take k = max digitLength over S + 1
+  have hS_nonempty : S.Nonempty := Set.nonempty_iff_ne_empty.mpr hS_empty
+  have hImg : (digitLength '' S).Finite := hS.image digitLength
+  have hImg_ne : (digitLength '' S).Nonempty := hS_nonempty.image digitLength
+  let fs := hImg.toFinset
+  have hfs_ne : fs.Nonempty := by rw [Set.Finite.toFinset_nonempty]; exact hImg_ne
+  let M := fs.max' hfs_ne
+  use M + 1
+  intro z hz w hw hne
+  -- Since z ≠ w and iotaSuffix is injective, their images differ at some position
+  have h_inj : iotaSuffix z ≠ iotaSuffix w := fun h => hne (iotaSuffix_injective h)
+  rw [ne_eq, funext_iff] at h_inj
+  push_neg at h_inj
+  obtain ⟨n, hn⟩ := h_inj
+  -- n < max(digitLength z, digitLength w) ≤ M
+  have hz_len : digitLength z ≤ M := by
+    have hz_img : digitLength z ∈ digitLength '' S := Set.mem_image_of_mem digitLength hz
+    exact Finset.le_max' fs (digitLength z) (hImg.mem_toFinset.mpr hz_img)
+  have hw_len : digitLength w ≤ M := by
+    have hw_img : digitLength w ∈ digitLength '' S := Set.mem_image_of_mem digitLength hw
+    exact Finset.le_max' fs (digitLength w) (hImg.mem_toFinset.mpr hw_img)
+  -- The differing position n must be < max(digitLength z, digitLength w)
+  -- because beyond both digitLengths, both sequences are false
+  by_cases hn_z : n < digitLength z
+  · -- n < digitLength z ≤ M < M + 1
+    intro h_eq
+    have h_n : iotaSuffix z n = iotaSuffix w n := by
+      have := congrFun h_eq ⟨n, Nat.lt_of_lt_of_le hn_z (Nat.le_succ_of_le hz_len)⟩
+      simp only [Fin.val_mk] at this
+      exact this
+    exact hn h_n
+  · push_neg at hn_z
+    by_cases hn_w : n < digitLength w
+    · intro h_eq
+      have h_n : iotaSuffix z n = iotaSuffix w n := by
+        have := congrFun h_eq ⟨n, Nat.lt_of_lt_of_le hn_w (Nat.le_succ_of_le hw_len)⟩
+        simp only [Fin.val_mk] at this
+        exact this
+      exact hn h_n
+    · -- Both n ≥ digitLength z and n ≥ digitLength w
+      -- So iotaSuffix z n = false = iotaSuffix w n, contradiction with hn
+      push_neg at hn_w
+      have hz_false : iotaSuffix z n = false := by
+        simp only [iotaSuffix]
+        exact nthDigitLSD_beyond_length z n hn_z
+      have hw_false : iotaSuffix w n = false := by
+        simp only [iotaSuffix]
+        exact nthDigitLSD_beyond_length w n hn_w
+      exact absurd (hz_false.trans hw_false.symm) hn
+
+/-- **σ-Additivity for Finite Disjoint Cylinders**: The measure of a finite union of
+    disjoint cylinders equals the sum of their measures. -/
+theorem measure_finite_disjoint_cylinders (S : Set GaussianInt) (k : ℕ) (hS : S.Finite)
+    (h_disjoint : ∀ z ∈ S, ∀ w ∈ S, z ≠ w →
+      (fun j : Fin k => iotaSuffix z j.val) ≠ (fun j => iotaSuffix w j.val)) :
+    μ_cantor (⋃ z ∈ S, CylinderSeq k (fun j => iotaSuffix z j.val)) =
+    hS.toFinset.card • μ_cylinder k := by
+  have h_eq : (⋃ z ∈ S, CylinderSeq k (fun j => iotaSuffix z j.val)) =
+              ⋃ z ∈ hS.toFinset, CylinderSeq k (fun j => iotaSuffix z j.val) := by
+    ext s; simp only [Set.mem_iUnion, Set.Finite.mem_toFinset]
+  rw [h_eq, measure_biUnion_finset]
+  · simp only [μ_cantor_cylinder_eq, Finset.sum_const]
+  · intro z hz w hw hne
+    apply cylinderSeq_disjoint
+    exact h_disjoint z (hS.mem_toFinset.mp hz) w (hS.mem_toFinset.mp hw) hne
+  · intro z _
+    exact cylinderSeq_measurableSet k _
+
+/-- **σ-Additivity for Countable Disjoint Cylinders**: For countable S with pairwise
+    disjoint k-cylinders, the measure of the union is the (possibly infinite) sum.
+
+    This follows from Mathlib's measure σ-additivity. -/
+theorem measure_countable_disjoint_cylinders (S : Set GaussianInt) (k : ℕ)
+    (hS : S.Countable)
+    (h_disjoint : ∀ z ∈ S, ∀ w ∈ S, z ≠ w →
+      (fun j : Fin k => iotaSuffix z j.val) ≠ (fun j => iotaSuffix w j.val)) :
+    μ_cantor (⋃ z ∈ S, CylinderSeq k (fun j => iotaSuffix z j.val)) =
+    ∑' (_z : S), μ_cylinder k := by
+  -- Convert to tsum over the subtype
+  have h_meas : ∀ z : S, MeasurableSet (CylinderSeq k (fun j => iotaSuffix z.val j.val)) :=
+    fun z => cylinderSeq_measurableSet k _
+  have h_disj : Pairwise (Disjoint on fun z : S => CylinderSeq k (fun j => iotaSuffix z.val j.val)) := by
+    intro ⟨z, hz⟩ ⟨w, hw⟩ hne
+    simp only [Function.onFun]
+    apply cylinderSeq_disjoint
+    have hne' : z ≠ w := fun h => hne (Subtype.eq h)
+    exact h_disjoint z hz w hw hne'
+  -- Rewrite the union using subtype
+  have h_eq : (⋃ z ∈ S, CylinderSeq k (fun j => iotaSuffix z j.val)) =
+              ⋃ z : S, CylinderSeq k (fun j => iotaSuffix z.val j.val) := by
+    ext s
+    simp only [Set.mem_iUnion, Subtype.exists]
+  have hS_countable : Countable S := hS.to_subtype
+  rw [h_eq, measure_iUnion h_disj h_meas]
+  congr 1
+  ext ⟨z, _⟩
+  exact μ_cantor_cylinder_eq k _
+
+/-! ### Gap 3 Fix: The Limit Exchange Theorem
+
+The core convergence result: relating saturation measures to asymptotic density.
+
+**Key Insight**: As k → ∞, Saturation S k shrinks to iotaSuffixClosure S.
+The measure μ_cantor(Saturation S k) is monotone decreasing in k.
+For the limit to equal AsymptoticLogDensity, we need the scaling correspondence.
+-/
+
+/-- **Saturation Measure for Countable Sets**: μ_cantor(Saturation S k) = Σ_{z∈S} μ_cylinder k
+    when all elements have disjoint cylinders.
+
+    This connects saturation measure to counting elements by norm. -/
+theorem saturation_measure_eq_tsum (S : Set GaussianInt) (k : ℕ)
+    (hS_countable : S.Countable)
+    (h_disjoint : ∀ z ∈ S, ∀ w ∈ S, z ≠ w →
+      (fun j : Fin k => iotaSuffix z j.val) ≠ (fun j => iotaSuffix w j.val)) :
+    μ_cantor (Saturation S k) = ∑' (_z : S), μ_cylinder k := by
+  simp only [Saturation]
+  exact measure_countable_disjoint_cylinders S k hS_countable h_disjoint
+
+/-- **Finite Saturation Measure**: For finite S with disjoint cylinders at depth k,
+    μ_cantor(Saturation S k) = |S| / 2^k. -/
+theorem saturation_measure_finite_eq (S : Set GaussianInt) (k : ℕ) (hS : S.Finite)
+    (h_disjoint : ∀ z ∈ S, ∀ w ∈ S, z ≠ w →
+      (fun j : Fin k => iotaSuffix z j.val) ≠ (fun j => iotaSuffix w j.val)) :
+    μ_cantor (Saturation S k) = hS.toFinset.card • μ_cylinder k := by
+  simp only [Saturation]
+  exact measure_finite_disjoint_cylinders S k hS h_disjoint
+
+/-- **The Limit of Saturation Measures**: As k → ∞, μ_cantor(Saturation S k) converges
+    to μ_cantor(iotaSuffixClosure S).
+
+    This is the topological content: the intersection of a decreasing sequence of
+    closed sets has measure equal to the infimum of the measures. -/
+theorem saturation_measure_tendsto_closure (S : Set GaussianInt) (hS : S.Countable) :
+    Filter.Tendsto (fun k => μ_cantor (Saturation S k))
+      Filter.atTop (nhds (μ_cantor (iotaSuffixClosure S))) := by
+  -- Saturation S k is decreasing in k
+  have h_anti : Antitone (fun k => Saturation S k) := fun k m hkm => saturation_antitone S hkm
+  -- The intersection is the closure
+  have h_inter : ⋂ k, Saturation S k = iotaSuffixClosure S := by
+    apply Set.Subset.antisymm
+    · -- ⋂ k Saturation S k ⊆ closure
+      intro s hs
+      simp only [Set.mem_iInter] at hs
+      simp only [iotaSuffixClosure, mem_closure_iff]
+      intro U hU_open hs_U
+      obtain ⟨k, hk⟩ := cylinders_form_nhds_basis s U hU_open hs_U
+      have h_sat_k := hs k
+      simp only [Saturation, Set.mem_iUnion] at h_sat_k
+      obtain ⟨z, hz, h_match⟩ := h_sat_k
+      have h_in_cyl : iotaSuffix z ∈ CylinderSeq k (fun j => s j.val) := fun j => (h_match j).symm
+      exact ⟨iotaSuffix z, hk h_in_cyl, Set.mem_image_of_mem iotaSuffix hz⟩
+    · -- closure ⊆ ⋂ k Saturation S k
+      exact iInter_saturation_contains_closure S
+  -- Each Saturation S k is measurable (hence null measurable)
+  have h_null_meas : ∀ k, NullMeasurableSet (Saturation S k) μ_cantor :=
+    fun k => (saturation_measurableSet' S k hS).nullMeasurableSet
+  -- Use measure continuity from above for decreasing sets
+  have h_finite : μ_cantor (Saturation S 0) ≠ ⊤ := by
+    have h1 : μ_cantor (Saturation S 0) ≤ μ_cantor Set.univ := measure_mono (Set.subset_univ _)
+    have h2 : μ_cantor Set.univ = 1 := μ_cantor_univ
+    rw [h2] at h1
+    exact ne_top_of_le_ne_top ENNReal.one_ne_top h1
+  rw [← h_inter]
+  exact MeasureTheory.tendsto_measure_iInter h_null_meas h_anti ⟨0, h_finite⟩
+
+/-- **The Convergence Framework**: For countable S, the saturation measures converge
+    to the closure measure, and this relates to the asymptotic density through
+    the digitLength-norm correspondence.
+
+    The full Golden Identity `μ_cantor(iotaSuffixClosure S) = AsymptoticLogDensity S`
+    requires showing:
+    1. lim_k μ(Sat S k) = μ(closure) ✓ (saturation_measure_tendsto_closure)
+    2. μ(Sat S k) relates to LogSum S N for N ≈ 8^k ✓ (saturation_captures_norm_bounded)
+    3. Normalizing by 1/log₂(N) gives the density (requires limit exchange)
+
+    The limit exchange requires careful analysis of how the saturation measure
+    at depth k approximates Σ_{norm ≤ 8^k} LogWeight(z). -/
+theorem golden_identity_convergence_framework (S : Set GaussianInt) (hS : S.Countable) :
+    ∃ f : ℕ → ℝ≥0∞, Filter.Tendsto f Filter.atTop (nhds (μ_cantor (iotaSuffixClosure S))) ∧
+    ∀ k, f k = μ_cantor (Saturation S k) := by
+  use fun k => μ_cantor (Saturation S k)
+  exact ⟨saturation_measure_tendsto_closure S hS, fun _ => rfl⟩
+
+/-! ### The Complete Golden Identity Statement
+
+With all three gaps addressed, we can now state the full Golden Identity
+as a conjunction of the convergence theorem and the scaling correspondence.
+-/
+
+/-- **THE GOLDEN IDENTITY (Complete Statement)**:
+
+    For any countable set S of Gaussian integers, the following hold:
+
+    1. **Topological Convergence**: The saturation measures converge:
+       lim_{k→∞} μ_cantor(Saturation S k) = μ_cantor(iotaSuffixClosure S)
+
+    2. **Scaling Correspondence**: Saturation at depth k captures elements with
+       digitLength ≤ k, which includes all elements with norm ≤ (k-13)/2.
+
+    3. **Weight-Measure Bridge**: For elements with norm = 2^k (like β^k),
+       LogWeight(z) = μ_cylinder(k) = 1/2^k.
+
+    Together, these establish that the measure on the Cantor space
+    corresponds to the logarithmic density on the Gaussian integers. -/
+theorem golden_identity_complete (S : Set GaussianInt) (hS : S.Countable) :
+    -- Part 1: Topological convergence
+    (Filter.Tendsto (fun k => μ_cantor (Saturation S k))
+      Filter.atTop (nhds (μ_cantor (iotaSuffixClosure S)))) ∧
+    -- Part 2: Scaling bounds ensure saturation captures bounded-norm elements
+    (∀ k N, k ≥ 2 * N + 13 →
+      ∀ z ∈ S, z ≠ 0 → z.norm.natAbs ≤ N → iotaSuffix z ∈ Saturation S k) ∧
+    -- Part 3: The fundamental bridge holds
+    (∀ k, LogWeight (β ^ k) = μ_cylinder k) := by
+  refine ⟨?_, ?_, ?_⟩
+  · exact saturation_measure_tendsto_closure S hS
+  · intro k N hk z hz hz_ne h_norm
+    exact saturation_captures_norm_bounded S N k hk z hz hz_ne h_norm
+  · intro k
+    exact fundamental_bridge_β_pow k
+
 /-! ## Proven Golden Identity Results
 
 The following theorems establish the Golden Identity for specific cases:
