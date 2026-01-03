@@ -586,45 +586,6 @@ theorem eventuallyZeroSet_dense : Dense EventuallyZeroSet := by
 theorem eventuallyZeroSet_closure_eq_univ : closure EventuallyZeroSet = Set.univ := by
   exact Dense.closure_eq eventuallyZeroSet_dense
 
-/-- Helper: digit (β * z) = false (β divides β * z) -/
-theorem digit_β_mul (z : GaussianInt) : digit (β * z) = false := by
-  simp only [digit]
-  have h_dvd : β ∣ β * z := dvd_mul_right β z
-  have h_parity := (β_dvd_iff (β * z)).mp h_dvd
-  simp only [ne_eq, decide_eq_false_iff_not, not_not]
-  exact h_parity
-
-/-- Helper: βQuot (β * z) = z -/
-theorem βQuot_β_mul (z : GaussianInt) : βQuot (β * z) = z := by
-  have h_digit := digit_β_mul z
-  have h_spec := digit_βQuot_spec (β * z)
-  rw [h_digit] at h_spec
-  -- h_spec : β * z = (if false then 1 else 0) + β * βQuot (β * z)
-  -- Simplify: (if false then 1 else 0) = 0
-  have h_simp : (if false then (1 : GaussianInt) else 0) = 0 := rfl
-  rw [h_simp, zero_add] at h_spec
-  have hβ_ne : β ≠ 0 := by decide
-  exact mul_left_cancel₀ hβ_ne h_spec.symm
-
-/-- Helper: digit (1 + β * z) = true -/
-theorem digit_one_add_β_mul (z : GaussianInt) : digit (1 + β * z) = true := by
-  simp only [digit, β]
-  simp only [Zsqrtd.add_re, Zsqrtd.add_im, Zsqrtd.mul_re, Zsqrtd.mul_im,
-             Zsqrtd.one_re, Zsqrtd.one_im]
-  simp only [ne_eq, decide_eq_true_eq]
-  ring_nf
-  omega
-
-/-- Helper: βQuot (1 + β * z) = z -/
-theorem βQuot_one_add_β_mul (z : GaussianInt) : βQuot (1 + β * z) = z := by
-  have h_digit := digit_one_add_β_mul z
-  have h_spec := digit_βQuot_spec (1 + β * z)
-  rw [h_digit] at h_spec
-  simp only [ite_true] at h_spec
-  have h_eq : β * z = β * βQuot (1 + β * z) := add_left_cancel h_spec
-  have hβ_ne : β ≠ 0 := by decide
-  exact mul_left_cancel₀ hβ_ne h_eq.symm
-
 /-- The image of iotaSuffix on all Gaussian integers IS EventuallyZeroSet.
     Forward: iotaSuffix z is eventually zero (finite digitLength).
     Reverse: Every eventually zero sequence comes from some Gaussian integer. -/

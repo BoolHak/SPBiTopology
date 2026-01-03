@@ -81,6 +81,57 @@ def βQuot (z : GaussianInt) : GaussianInt :=
 theorem βQuot_zero : βQuot (0 : GaussianInt) = 0 := by
   ext <;> simp [βQuot, βQuotAux, digit_zero]
 
+/-- β * z is always divisible by β -/
+theorem digit_β_mul (z : GaussianInt) : digit (β * z) = false := by
+  rw [digit_false_iff]
+  exact dvd_mul_right β z
+
+/-- βQuot (β * z) = z -/
+theorem βQuot_β_mul (z : GaussianInt) : βQuot (β * z) = z := by
+  have hd : digit (β * z) = false := digit_β_mul z
+  simp only [βQuot, hd, ↑reduceIte]
+  have h_parity : (β * z).re % 2 = (β * z).im % 2 := by
+    have := (digit_false_iff (β * z)).mp hd
+    rw [β_dvd_iff] at this
+    exact this
+  have h_eq := β_mul_βQuotAux (β * z) h_parity
+  have h_inj : β * βQuotAux (β * z) = β * z := h_eq
+  have hβ_ne : β ≠ 0 := by decide
+  exact mul_left_cancel₀ hβ_ne h_inj
+
+/-- 1 + β * z is never divisible by β (for any z) -/
+theorem digit_one_add_β_mul (z : GaussianInt) : digit (1 + β * z) = true := by
+  rw [digit_true_iff]
+  intro ⟨w, hw⟩
+  have h1 : (1 : GaussianInt).re % 2 ≠ (1 : GaussianInt).im % 2 := by decide
+  have hdvd : β ∣ (1 : GaussianInt) := by
+    have hsub : (1 : GaussianInt) = (1 + β * z) - β * z := by ring
+    rw [hsub]
+    have h1 : β ∣ (1 + β * z) := ⟨w, hw⟩
+    have h2 : β ∣ β * z := dvd_mul_right β z
+    exact dvd_sub h1 h2
+  rw [β_dvd_iff] at hdvd
+  exact h1 hdvd
+
+/-- βQuot (1 + β * z) = z -/
+theorem βQuot_one_add_β_mul (z : GaussianInt) : βQuot (1 + β * z) = z := by
+  have hd : digit (1 + β * z) = true := digit_one_add_β_mul z
+  simp only [βQuot, hd, ↑reduceIte]
+  have h_parity : (β * z).re % 2 = (β * z).im % 2 := by
+    have := (digit_false_iff (β * z)).mp (digit_β_mul z)
+    rw [β_dvd_iff] at this
+    exact this
+  have h_eq := β_mul_βQuotAux (β * z) h_parity
+  have hβQuotAux_eq : βQuotAux (β * z) = z := by
+    have h_inj : β * βQuotAux (β * z) = β * z := h_eq
+    have hβ_ne : β ≠ 0 := by decide
+    exact mul_left_cancel₀ hβ_ne h_inj
+  have h_arg_eq : (⟨(1 + β * z).re - 1, (1 + β * z).im⟩ : GaussianInt) = β * z := by
+    ext
+    · simp only [Zsqrtd.add_re, Zsqrtd.one_re, Zsqrtd.mul_re, β]; ring
+    · simp only [Zsqrtd.add_im, Zsqrtd.one_im, Zsqrtd.mul_im, β]; ring
+  rw [h_arg_eq, hβQuotAux_eq]
+
 /-- The fundamental recurrence: z = digit z + β * βQuot z -/
 theorem digit_βQuot_spec (z : GaussianInt) :
     z = (if digit z then 1 else 0) + β * βQuot z := by
@@ -1050,6 +1101,94 @@ theorem eq_of_toDigits_eq (z w : GaussianInt) (h : toDigits z = toDigits w) : z 
 
 /-- toDigits is injective -/
 theorem toDigits_injective : Function.Injective toDigits := eq_of_toDigits_eq
+
+/-- For a canonical digit list (non-empty with last element true), toDigits inverts evalDigits.
+    This is the converse of evalDigits_toDigits for canonical lists. -/
+theorem toDigits_evalDigits_of_canonical (ds : List Bool) (hds : ds ≠ [])
+    (hlast : ds.getLast hds = true) : toDigits (evalDigits ds) = ds := by
+  induction ds with
+  | nil => exact absurd rfl hds
+  | cons d ds' ih =>
+    simp only [evalDigits]
+    by_cases hds' : ds' = []
+    · subst hds'
+      simp only [evalDigits, mul_zero, add_zero]
+      cases hd : d with
+      | false =>
+        subst hd
+        simp only [List.getLast_singleton] at hlast
+        exact absurd hlast (by decide)
+      | true =>
+        subst hd
+        simp only [ite_true]
+        have h1_ne : (1 : GaussianInt) ≠ 0 := by decide
+        rw [toDigits]
+        simp only [h1_ne, ↑reduceDIte]
+        have h_digit_1 : digit (1 : GaussianInt) = true := by native_decide
+        have h_βQuot_1 : βQuot (1 : GaussianInt) = 0 := by native_decide
+        rw [h_digit_1, h_βQuot_1, toDigits_zero]
+    · have hds'_ne : ds' ≠ [] := hds'
+      have hlast' : ds'.getLast hds'_ne = true := by
+        have h := hlast
+        simp only [List.getLast_cons hds'_ne] at h
+        exact h
+      have ih_result := ih hds'_ne hlast'
+      have heval_ne : evalDigits ds' ≠ 0 := by
+        intro h_eq
+        have : toDigits (evalDigits ds') = [] := by rw [h_eq, toDigits_zero]
+        rw [ih_result] at this
+        exact hds'_ne this
+      have hne : (if d then 1 else 0) + β * evalDigits ds' ≠ 0 := by
+        intro h_eq
+        cases hd : d with
+        | false =>
+          subst hd
+          have hf : (false = true) = False := by decide
+          simp only [hf, ite_false, zero_add] at h_eq
+          have hβ_ne : β ≠ 0 := by decide
+          have := mul_eq_zero.mp h_eq
+          cases this with
+          | inl h => exact hβ_ne h
+          | inr h => exact heval_ne h
+        | true =>
+          subst hd
+          simp only [ite_true] at h_eq
+          have h1_ne : (1 : GaussianInt) ≠ 0 := by decide
+          have h1_add : (1 : GaussianInt) = (1 + β * evalDigits ds') - β * evalDigits ds' := by ring
+          rw [h_eq] at h1_add
+          simp only [zero_sub] at h1_add
+          have h1_neg : -1 = β * evalDigits ds' := by
+            have : -(β * evalDigits ds') = (1 : GaussianInt) := h1_add.symm
+            rw [← neg_neg (β * evalDigits ds'), this]
+          have hβ_dvd : β ∣ -1 := ⟨evalDigits ds', h1_neg⟩
+          rw [β_dvd_iff] at hβ_dvd
+          simp only [Zsqrtd.neg_re, Zsqrtd.one_re, Zsqrtd.neg_im, Zsqrtd.one_im, neg_zero] at hβ_dvd
+          norm_num at hβ_dvd
+      rw [toDigits]
+      simp only [hne, ↑reduceDIte]
+      have h_digit_eq : digit ((if d then 1 else 0) + β * evalDigits ds') = d := by
+        cases hd : d with
+        | false =>
+          subst hd
+          have hf : (false = true) = False := by decide
+          simp only [hf, ite_false, zero_add]
+          exact digit_β_mul (evalDigits ds')
+        | true =>
+          subst hd
+          simp only [ite_true]
+          exact digit_one_add_β_mul (evalDigits ds')
+      have h_βQuot_eq : βQuot ((if d then 1 else 0) + β * evalDigits ds') = evalDigits ds' := by
+        cases hd : d with
+        | false =>
+          subst hd
+          have hf : (false = true) = False := by decide
+          simp only [hf, ite_false, zero_add]
+          exact βQuot_β_mul (evalDigits ds')
+        | true =>
+          subst hd
+          simp only [ite_true]
+          exact βQuot_one_add_β_mul (evalDigits ds')
+      rw [h_digit_eq, h_βQuot_eq, ih_result]
 
 /-! ## BREAKTHROUGH: Algebraic-Topological Correspondence -/
 

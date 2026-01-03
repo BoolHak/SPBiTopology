@@ -86,21 +86,6 @@ theorem one_add_β_mul_ne_zero (w : GaussianInt) : 1 + β * w ≠ 0 := by
   simp only [Zsqrtd.add_im, Zsqrtd.one_im, β, Zsqrtd.mul_im, Zsqrtd.zero_im] at him
   omega
 
-/-- 1 + β * w has digit = true -/
-theorem digit_one_add_β_mul (w : GaussianInt) : digit (1 + β * w) = true := by
-  rw [digit_true_iff]
-  intro ⟨q, hq⟩
-  have hre : (1 + β * w).re = (β * q).re := congrArg Zsqrtd.re hq
-  simp only [Zsqrtd.add_re, Zsqrtd.one_re, Zsqrtd.mul_re, β] at hre
-  have him : (1 + β * w).im = (β * q).im := congrArg Zsqrtd.im hq
-  simp only [Zsqrtd.add_im, Zsqrtd.one_im, Zsqrtd.mul_im, β] at him
-  omega
-
-/-- β * w has digit = false -/
-theorem digit_β_mul (w : GaussianInt) : digit (β * w) = false := by
-  rw [digit_false_iff]
-  exact dvd_mul_right β w
-
 /-- The self-similarity equation for Gaussian integers:
     Every z can be written as either β * w or 1 + β * w for some w -/
 theorem gaussianInt_self_similarity (z : GaussianInt) :
@@ -114,32 +99,6 @@ theorem gaussianInt_self_similarity (z : GaussianInt) :
     have hspec := digit_βQuot_spec z
     simp only [eq_true_of_ne_false hd, ↓reduceIte] at hspec
     exact ⟨βQuot z, hspec⟩
-
-/-- βQuot of 1 + β * w equals w -/
-theorem βQuot_one_add_β_mul (w : GaussianInt) : βQuot (1 + β * w) = w := by
-  have hd : digit (1 + β * w) = true := digit_one_add_β_mul w
-  have hspec := digit_βQuot_spec (1 + β * w)
-  simp only [hd, ↓reduceIte] at hspec
-  have heq : β * βQuot (1 + β * w) = β * w := by
-    have h1 : (β * βQuot (1 + β * w)).re = (β * w).re := by
-      have := congrArg Zsqrtd.re hspec
-      simp only [Zsqrtd.add_re, Zsqrtd.one_re] at this
-      linarith
-    have h2 : (β * βQuot (1 + β * w)).im = (β * w).im := by
-      have := congrArg Zsqrtd.im hspec
-      simp only [Zsqrtd.add_im, Zsqrtd.one_im] at this
-      linarith
-    ext <;> [exact h1; exact h2]
-  exact mul_left_cancel₀ β_ne_zero heq
-
-/-- βQuot of β * w equals w -/
-theorem βQuot_β_mul (w : GaussianInt) : βQuot (β * w) = w := by
-  by_cases hw : w = 0
-  · simp only [hw, mul_zero, βQuot_zero]
-  · have hd : digit (β * w) = false := digit_β_mul w
-    have hspec := digit_βQuot_spec (β * w)
-    simp only [hd, Bool.false_eq_true, ↓reduceIte, zero_add] at hspec
-    exact mul_left_cancel₀ β_ne_zero hspec.symm
 
 /-! ## Section 3: IFS Maps T₀ and T₁
 
