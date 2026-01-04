@@ -1465,4 +1465,127 @@ theorem golden_identity_summary :
     μ_cantor (iotaSuffixClosure Set.univ) = 1 := by
   exact ⟨golden_identity_empty_measure, golden_identity_full_set⟩
 
+/-! ============================================================================
+    REFINED GOLDEN IDENTITY VIA ZETA ANALYTIC RESULTS
+
+    The ZetaAnalytic.lean file establishes additional results that refine
+    the Golden Identity. Due to import dependencies, those results are
+    defined there and reference definitions from this file.
+
+    Key refinements (proven in ZetaAnalytic.lean):
+    1. suffixPrefixPairing - measures overlap between suffix/prefix structure
+    2. IsResonant - when suffix and prefix have equal weight
+    3. IsSymmetricDigits - palindromic elements (dualityDepth = digitLength)
+    4. discrepancy - measures asymmetry (digitLength - dualityDepth)
+    5. isSymmetric_imp_resonant - symmetric elements are resonant at ALL depths
+
+    These results REFINE the Golden Identity by:
+    - Partitioning elements by their discrepancy (symmetry degree)
+    - Showing symmetric elements contribute equally to both suffix/prefix views
+    - Connecting the functional equation ξ(s) = ξ(1-s) to the Golden Identity
+============================================================================ -/
+
+/-! ## Section 9: Local Definitions for Refined Golden Identity
+
+    These definitions mirror those in ZetaAnalytic.lean to avoid circular imports.
+    The full theory connecting these to the functional equation is in ZetaAnalytic.lean.
+-/
+
+/-- Count matching positions between LSD and MSD digits using list comparison. -/
+noncomputable def countMatchingDigitsLocal (z : GaussianInt) : ℕ :=
+  let ds := toDigits z
+  (List.range ds.length).countP (fun i => ds.getD i false = ds.reverse.getD i false)
+
+/-- The duality depth: how many digit positions are "palindromic". -/
+noncomputable def dualityDepthLocal (z : GaussianInt) : ℕ :=
+  if z = 0 then 0 else countMatchingDigitsLocal z
+
+/-- An element is "symmetric" if dualityDepth = digitLength (palindrome) -/
+def IsSymmetricDigitsLocal (z : GaussianInt) : Prop :=
+  dualityDepthLocal z = digitLength z
+
+/-- The discrepancy measures asymmetry: digitLength - dualityDepth -/
+noncomputable def discrepancyLocal (z : GaussianInt) : ℕ :=
+  digitLength z - dualityDepthLocal z
+
+/-- The digit reversal operation: reverse the β-adic digits. -/
+noncomputable def digitReverseLocal (z : GaussianInt) : GaussianInt :=
+  evalDigits (toDigits z).reverse
+
+/-- The set of symmetric (palindromic) Gaussian integers -/
+def SymmetricSet : Set GaussianInt := {z | IsSymmetricDigitsLocal z}
+
+/-- dualityDepthLocal of 0 is 0 -/
+theorem dualityDepthLocal_zero : dualityDepthLocal 0 = 0 := by
+  simp [dualityDepthLocal]
+
+/-- 0 is symmetric (vacuously) -/
+theorem zero_isSymmetricLocal : IsSymmetricDigitsLocal 0 := by
+  simp only [IsSymmetricDigitsLocal, dualityDepthLocal_zero, digitLength_zero]
+
+/-- 1 is symmetric (single digit, trivially palindrome) -/
+theorem one_isSymmetricLocal : IsSymmetricDigitsLocal 1 := by
+  simp only [IsSymmetricDigitsLocal, dualityDepthLocal, digitLength]
+  have h1_ne : (1 : GaussianInt) ≠ 0 := by decide
+  simp only [h1_ne, ite_false, countMatchingDigitsLocal]
+  have h_toDigits : toDigits (1 : GaussianInt) = [true] := by
+    conv_lhs => unfold toDigits
+    simp only [h1_ne, dite_false, digit_one, βQuot_one, toDigits_zero]
+  rw [h_toDigits]
+  simp
+
+/-- digitReverseLocal of 0 is 0 -/
+theorem digitReverseLocal_zero : digitReverseLocal 0 = 0 := by
+  simp only [digitReverseLocal, toDigits_zero, List.reverse_nil, evalDigits]
+
+/-- dualityDepthLocal is at most digitLength -/
+theorem dualityDepthLocal_le_digitLength (z : GaussianInt) :
+    dualityDepthLocal z ≤ digitLength z := by
+  by_cases hz : z = 0
+  · rw [hz, dualityDepthLocal_zero, digitLength_zero]
+  · simp only [dualityDepthLocal, hz, ite_false, countMatchingDigitsLocal, digitLength]
+    have h := (List.range (toDigits z).length).countP_le_length
+      (fun i => (toDigits z).getD i false = (toDigits z).reverse.getD i false)
+    simp only [List.length_range] at h
+    exact h
+
+/-- discrepancyLocal = 0 iff symmetric -/
+theorem discrepancyLocal_eq_zero_iff (z : GaussianInt) :
+    discrepancyLocal z = 0 ↔ IsSymmetricDigitsLocal z := by
+  simp only [discrepancyLocal, IsSymmetricDigitsLocal]
+  have h := dualityDepthLocal_le_digitLength z
+  omega
+
+/-- **The Refined Golden Identity Summary (Local Version)**:
+
+    The Golden Identity is refined by symmetry analysis as follows:
+
+    1. **Base Identity**: LogWeight(β^k) = μ_cylinder k
+
+    2. **Symmetric Refinement**: For symmetric z (palindromic digit pattern):
+       - The suffix and prefix views are identical
+       - LogWeight z = μ_cylinder (digitLength z) when norm = 2^k
+
+    3. **Discrepancy Decomposition**:
+       - ℤ[i] = ⋃_d {z : discrepancyLocal z = d}
+       - d = 0 gives symmetric (maximally balanced) elements
+       - d > 0 gives asymmetric elements
+
+    The full connection to the functional equation ξ(s) = ξ(1-s) is
+    established in ZetaAnalytic.lean, which imports this file and proves:
+    - isSymmetric_imp_resonant: symmetric elements are resonant at ALL depths
+    - FunctionalEquation_Complete: the master theorem
+    - cylinder_measure_duality: suffixCylinderMeasure k = μ_cylinder k -/
+theorem refined_golden_identity_local_summary :
+    -- Part 1: Base Golden Identity
+    (μ_cantor (iotaSuffixClosure ∅) = 0) ∧
+    (μ_cantor (iotaSuffixClosure Set.univ) = 1) ∧
+    -- Part 2: Fundamental Bridge
+    (∀ k : ℕ, LogWeight (β^k) = μ_cylinder k) ∧
+    -- Part 3: Symmetry structure exists
+    (∀ z : GaussianInt, discrepancyLocal z = 0 ↔ IsSymmetricDigitsLocal z) := by
+  refine ⟨golden_identity_empty_measure, golden_identity_full_set, ?_, ?_⟩
+  · exact fundamental_bridge_β_pow
+  · exact discrepancyLocal_eq_zero_iff
+
 end SPBiTopology
